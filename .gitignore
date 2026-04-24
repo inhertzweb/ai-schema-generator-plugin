@@ -1,0 +1,40 @@
+# OS Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Composer
+vendor/
+composer.lock
+
+# WordPress
+wp-content/uploads/
+wp-content/upgrade/
+wp-content/backup-*
+
+# Debug
+*.log
+debug.log
+
+# Temporary files
+.tmp/
+.cache/
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.*.local
