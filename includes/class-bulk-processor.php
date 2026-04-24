@@ -85,7 +85,7 @@ class BulkProcessor {
 			return 0;
 		}
 
-		// Store post IDs for batch processing (no WP-Cron, will process via AJAX polling)
+		// Store post IDs for batch processing
 		update_option(
 			'aisg_bulk_queue',
 			array_values( $post_ids )
@@ -95,32 +95,56 @@ class BulkProcessor {
 		update_option(
 			'aisg_bulk_progress',
 			array(
-				'total'    => count( $post_ids ),
-				'done'     => 0,
-				'errors'   => 0,
-				'started'  => current_time( 'mysql' ),
-				'status'   => 'running',
+				'total'      => count( $post_ids ),
+				'done'       => 0,
+				'errors'     => 0,
+				'started'    => current_time( 'mysql' ),
+				'status'     => 'running',
+				'method'     => 'wp-cron', // Track which method is processing
 			)
 		);
+
+		// Schedule first batch via WP-Cron (will process all batches)
+		// Use a unique timestamp to avoid conflicts
+		wp_schedule_single_event( time() + 1, 'aisg_process_batch' );
+
+		// Also set up AJAX fallback in case WP-Cron doesn't trigger
+		// Store a "trigger time" to detect if WP-Cron failed
+		update_option( 'aisg_cron_trigger_time', time() );
 
 		return count( $post_ids );
 	}
 
 	/**
-	 * Process next batch from queue (called via AJAX polling)
+	 * Process next batch from queue (called via AJAX polling as fallback)
+	 * This is used when WP-Cron is not available or has failed
 	 */
 	public static function process_next_batch() {
 		$queue = get_option( 'aisg_bulk_queue', array() );
+		$progress = get_option( 'aisg_bulk_progress', array() );
 		$start_time = time();
-		$timeout = 50; // Max 50 seconds per AJAX request
+		$timeout = 40; // Max 40 seconds per AJAX request (safer than 50)
 
 		if ( empty( $queue ) ) {
-			$progress = get_option( 'aisg_bulk_progress', array() );
-			$progress['status'] = 'complete';
+			$progress['status']    = 'complete';
 			$progress['completed'] = current_time( 'mysql' );
 			update_option( 'aisg_bulk_progress', $progress );
 			return false;
 		}
+
+		// Check if WP-Cron has taken over (check if method changed in progress)
+		if ( isset( $progress['method'] ) && 'wp-cron' === $progress['method'] ) {
+			$cron_trigger = get_option( 'aisg_cron_trigger_time', 0 );
+			// If WP-Cron was triggered recently, let it handle it
+			if ( $cron_trigger > ( time() - 60 ) ) {
+				// WP-Cron is active, return what we have
+				return ! empty( $queue );
+			}
+		}
+
+		// Mark that AJAX is handling this
+		$progress['method'] = 'ajax';
+		$progress['last_ajax_call'] = current_time( 'mysql' );
 
 		// Get next batch
 		$batch = array_slice( $queue, 0, self::BATCH_SIZE );
@@ -134,8 +158,6 @@ class BulkProcessor {
 		}
 
 		// Process batch with timeout protection
-		$progress = get_option( 'aisg_bulk_progress', array() );
-
 		foreach ( $batch as $post_id ) {
 			// Check timeout - if we're close to timing out, stop and reschedule rest
 			if ( time() - $start_time > $timeout ) {
@@ -172,18 +194,38 @@ class BulkProcessor {
 	}
 
 	/**
-	 * Process a batch of posts
+	 * Process a batch of posts via WP-Cron
+	 * This handles the entire queue, scheduling itself for the next batch if needed
 	 */
 	public static function process_batch( $post_ids = array() ) {
-		if ( empty( $post_ids ) ) {
+		$queue = get_option( 'aisg_bulk_queue', array() );
+
+		if ( empty( $queue ) ) {
+			// Queue is empty, mark as complete
+			$progress = get_option( 'aisg_bulk_progress', array() );
+			$progress['status']    = 'complete';
+			$progress['completed'] = current_time( 'mysql' );
+			update_option( 'aisg_bulk_progress', $progress );
 			return;
 		}
 
 		$progress = get_option( 'aisg_bulk_progress', array() );
 
-		foreach ( $post_ids as $post_id ) {
-			// Add 1 second delay between requests to respect rate limits
-			sleep( 1 );
+		// Process next batch
+		$batch = array_slice( $queue, 0, self::BATCH_SIZE );
+		$remaining = array_slice( $queue, self::BATCH_SIZE );
+
+		// Update queue
+		if ( empty( $remaining ) ) {
+			delete_option( 'aisg_bulk_queue' );
+		} else {
+			update_option( 'aisg_bulk_queue', $remaining );
+		}
+
+		// Process each post in batch
+		foreach ( $batch as $post_id ) {
+			// Add 0.5 second delay between requests
+			usleep( 500000 );
 
 			$result = SchemaBuilder::build( $post_id );
 
@@ -194,16 +236,17 @@ class BulkProcessor {
 			}
 		}
 
-		// Update progress
 		update_option( 'aisg_bulk_progress', $progress );
 
-		// Check if all batches done
-		if ( isset( $progress['total'] ) && isset( $progress['done'] ) ) {
-			if ( $progress['done'] + $progress['errors'] >= $progress['total'] ) {
-				$progress['status']    = 'complete';
-				$progress['completed'] = current_time( 'mysql' );
-				update_option( 'aisg_bulk_progress', $progress );
-			}
+		// Schedule next batch if there are more posts
+		if ( ! empty( $remaining ) ) {
+			// Schedule next batch after a short delay (5 seconds)
+			wp_schedule_single_event( time() + 5, 'aisg_process_batch' );
+		} else {
+			// All done
+			$progress['status']    = 'complete';
+			$progress['completed'] = current_time( 'mysql' );
+			update_option( 'aisg_bulk_progress', $progress );
 		}
 	}
 

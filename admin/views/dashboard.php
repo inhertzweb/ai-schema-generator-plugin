@@ -71,6 +71,16 @@ $log = get_option( 'aisg_log', array() );
 	<?php if ( ! empty( $progress ) && 'running' === ( $progress['status'] ?? '' ) ) : ?>
 		<div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px;">
 			<h3>Generazione in Corso</h3>
+
+			<?php
+			$method = $progress['method'] ?? 'ajax';
+			$method_label = 'wp-cron' === $method ? 'WP-Cron' : 'AJAX Polling';
+			$method_color = 'wp-cron' === $method ? '#28a745' : '#0073aa';
+			?>
+			<p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">
+				Metodo: <span style="color: <?php echo $method_color; ?>; font-weight: bold;">● <?php echo $method_label; ?></span>
+			</p>
+
 			<div style="margin: 12px 0;">
 				<div style="background: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
 					<?php
