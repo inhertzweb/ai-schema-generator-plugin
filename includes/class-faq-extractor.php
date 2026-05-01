@@ -56,8 +56,8 @@ class FaqExtractor {
 					foreach ( $block_data['questions'] as $q ) {
 						if ( isset( $q['question'], $q['answer'] ) ) {
 							$faqs[] = array(
-								'question' => sanitize_text_field( $q['question'] ),
-								'answer'   => sanitize_text_field( $q['answer'] ),
+								'question' => sanitize_text_field( wp_strip_all_tags( $q['question'] ) ),
+								'answer'   => sanitize_text_field( wp_strip_all_tags( $q['answer'] ) ),
 							);
 						}
 					}
