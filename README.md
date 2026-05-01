@@ -10,6 +10,9 @@ AI Schema Generator uses advanced AI models (Claude or Gemini) to intelligently 
 
 - **🤖 AI-Powered**: Uses Claude (Sonnet/Opus) or Gemini 3.x models for intelligent schema generation
 - **📊 25+ Schema Types**: Supports Organization, LocalBusiness, Person, Article, FAQ, Product, Service, Event, and more
+- **🏢 Smart Address Extraction**: Auto-fetches from Yoast SEO or intelligently parses footer HTML via AI
+- **✅ Intelligent Post-Processing**: Auto-fixes BreadcrumbList, Organization, LocalBusiness, FAQPage issues
+- **🔧 Auto-Corrections**: Deduplicates fields, validates addresses, strips HTML from FAQ answers
 - **🔄 Auto-Generation**: Optional automatic schema generation on publish
 - **📈 Bulk Processing**: Generate schemas for all existing posts in batches
 - **🛡️ Conflict Resolution**: Automatically detects and disables competing plugins (Yoast, RankMath, etc.)
@@ -25,6 +28,28 @@ AI Schema Generator uses advanced AI models (Claude or Gemini) to intelligently 
 3. Go to **Settings → AI Schema Generator**
 4. Configure your API key (Claude or Gemini)
 5. Enter your business brief and site context
+
+## Smart Post-Processing
+
+The plugin automatically detects and fixes common schema generation issues:
+
+| Issue | Solution |
+|-------|----------|
+| Missing BreadcrumbList `item` URLs | Auto-populates from breadcrumb names |
+| Duplicate fields (`logo`/`image`, multiple addresses) | Deduplicates, keeps primary field |
+| Incomplete addresses | Validates completeness, removes if too sparse |
+| HTML in FAQ answers | Strips tags, decodes entities, normalizes whitespace |
+| Missing phone numbers | Auto-fetches from Yoast SEO or footer settings |
+| Organization name duplicates | Keeps official name, removes abbreviations |
+
+## Address Extraction
+
+The plugin automatically extracts business address from:
+
+1. **Yoast SEO** (primary) — Local business settings (address, city, zipcode, country, phone)
+2. **Footer HTML** (fallback) — Intelligently parses footer using AI to identify address components
+
+If neither source has complete data, the plugin includes what's available and prompts you to fill in missing fields.
 
 ## Configuration
 
@@ -43,6 +68,35 @@ The plugin supports two AI providers:
 - Get API key: [aistudio.google.com](https://aistudio.google.com)
 - Max tokens: 4096 per request
 - Retry policy: 3 attempts with exponential backoff
+
+## How It Works
+
+```
+1. Analyze Page Content
+   └─ Extract text, metadata, FAQs, images
+
+2. Extract Business Address
+   ├─ Check Yoast SEO settings (primary)
+   └─ Parse footer HTML via AI (fallback)
+
+3. Build AI Prompt
+   ├─ Include page content
+   ├─ Include extracted address data
+   └─ Include business brief + llms.txt context
+
+4. Generate Schema
+   └─ Call Claude or Gemini API
+
+5. Post-Process & Validate
+   ├─ Fix BreadcrumbList item URLs
+   ├─ Deduplicate addresses and fields
+   ├─ Validate address completeness
+   ├─ Strip HTML from FAQ answers
+   └─ Add missing fields
+
+6. Inject into wp_head
+   └─ Output as JSON-LD <script> tag
+```
 
 ## Usage
 
