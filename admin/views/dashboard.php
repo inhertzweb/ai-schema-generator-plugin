@@ -452,6 +452,7 @@ function bindClearAllButton() {
         });
     });
 }
+}
 
 bindBulkActions();
 bindClearAllButton();
