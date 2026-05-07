@@ -228,227 +228,218 @@ $log = get_option( 'aisg_log', array() );
 </div>
 
 <script>
+	function updateProgressBar(progress) {
+		let progressContainer = document.querySelector('.aisg-progress-container');
+
+		if (!progressContainer) {
+			const bulkActionsDiv = document.querySelector('div:has(> #aisg-generate-missing)').parentNode.parentNode;
+			if (bulkActionsDiv) {
+				progressContainer = document.createElement('div');
+				progressContainer.className = 'aisg-progress-container';
+				progressContainer.style.background = 'white';
+				progressContainer.style.padding = '20px';
+				progressContainer.style.borderRadius = '8px';
+				progressContainer.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+				progressContainer.style.marginBottom = '20px';
+
+				bulkActionsDiv.parentNode.insertBefore(progressContainer, bulkActionsDiv.nextSibling);
+			}
+		}
+
+		if (progressContainer) {
+			const method = progress.method || 'ajax';
+			const methodLabel = 'wp-cron' === method ? 'WP-Cron' : 'AJAX Polling';
+			const methodColor = 'wp-cron' === method ? '#28a745' : '#0073aa';
+
+			const done = progress.done || 0;
+			const total = progress.total || 1;
+			const pct = Math.round((done / Math.max(total, 1)) * 100);
+
+			progressContainer.innerHTML = `
+				<h3>Generazione in Corso</h3>
+				<p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">
+					Metodo: <span style="color: ${methodColor}; font-weight: bold;">● ${methodLabel}</span>
+				</p>
+				<div style="margin: 12px 0;">
+					<div style="background: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
+						<div style="background: #0073aa; height: 100%; width: ${pct}%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;">
+							${pct}%
+						</div>
+					</div>
+				</div>
+				<p style="margin: 8px 0; font-size: 14px;">
+					${done} / ${total} completati
+					${progress.errors ? `(${progress.errors} errori)` : ''}
+				</p>
+			`;
+		}
+	}
+
+	function processBatch() {
+		fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: new URLSearchParams({
+				action: 'aisg_process_batch',
+				nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_process_batch' ) ); ?>'
+			})
+		})
+		.then(response => response.json())
+		.then(data => {
+			if (data.success) {
+				updateProgressBar(data.data);
+
+				if (data.data?.status === 'complete') {
+					location.reload();
+				} else if (data.data?.has_more) {
+					setTimeout(processBatch, 500);
+				}
+			} else {
+				console.error('Error processing batch:', data);
+			}
+		})
+		.catch(err => {
+			console.error('Network error:', err);
+			setTimeout(processBatch, 1000);
+		});
+	}
+
+	function startProgressPolling() {
+		if (window.progressPollInterval) {
+			clearInterval(window.progressPollInterval);
+		}
+
+		window.progressPollInterval = setInterval(() => {
+			fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'aisg_get_progress',
+					nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_get_progress' ) ); ?>'
+				})
+			})
+			.then(response => response.json())
+			.then(data => {
+				if (data.success && data.data) {
+					updateProgressBar(data.data);
+
+					if (data.data.status === 'complete') {
+						clearInterval(window.progressPollInterval);
+						location.reload();
+					}
+				}
+			})
+			.catch(err => {
+				console.error('Polling error:', err);
+			});
+		}, 2000);
+	}
+
+	function bulkGenerate(mode) {
+		const button = event.target;
+		button.disabled = true;
+		button.textContent = 'Preparando...';
+
+		fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: new URLSearchParams({
+				action: 'aisg_bulk_generate',
+				mode: mode,
+				nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_bulk_generate' ) ); ?>'
+			})
+		})
+		.then(response => response.json())
+		.then(data => {
+			button.disabled = false;
+			if (data.success) {
+				button.textContent = 'Generando...';
+
+				const initialProgress = {
+					total: data.data.count,
+					done: 0,
+					errors: 0,
+					status: 'running',
+					method: 'ajax'
+				};
+				updateProgressBar(initialProgress);
+
+				startProgressPolling();
+				processBatch();
+			} else {
+				button.textContent = mode === 'missing' ? 'Genera Mancanti' : (mode === 'outdated' ? 'Rigenera Non Aggiornati' : 'Genera Tutto');
+				alert('Errore: ' + (data.data?.message || 'Riprova'));
+			}
+		})
+		.catch(err => {
+			alert('Errore di rete: ' + err);
+			button.disabled = false;
+			button.textContent = mode === 'missing' ? 'Genera Mancanti' : (mode === 'outdated' ? 'Rigenera Non Aggiornati' : 'Genera Tutto');
+		});
+	}
+
 	function bindBulkActions() {
 		document.getElementById('aisg-generate-missing')?.addEventListener('click', () => bulkGenerate('missing'));
 		document.getElementById('aisg-generate-outdated')?.addEventListener('click', () => bulkGenerate('outdated'));
 		document.getElementById('aisg-generate-all')?.addEventListener('click', () => bulkGenerate('all'));
 	}
 
- function bulkGenerate(mode) {
-        const button = event.target;
-        button.disabled = true;
-        button.textContent = 'Preparando...';
+	function bindClearAllButton() {
+		document.getElementById('aisg-clear-all-schemas')?.addEventListener('click', function(e) {
+			e.preventDefault();
 
-        fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                action: 'aisg_bulk_generate',
-                mode: mode,
-                nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_bulk_generate' ) ); ?>'
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            button.disabled = false;
-            if (data.success) {
-                button.textContent = 'Generando...';
-                
-                // Initialize progress bar with starting data
-                const initialProgress = {
-                    total: data.data.count,
-                    done: 0,
-                    errors: 0,
-                    status: 'running',
-                    method: 'ajax'
-                };
-                updateProgressBar(initialProgress);
-                
-                // Start polling for progress updates (especially useful for WP-Cron)
-                startProgressPolling();
-                
-                processBatch();
-            } else {
-                button.textContent = mode === 'missing' ? 'Genera Mancanti' : (mode === 'outdated' ? 'Rigenera Non Aggiornati' : 'Genera Tutto');
-                alert('Errore: ' + (data.data?.message || 'Riprova'));
-            }
-        })
-        .catch(err => {
-            alert('Errore di rete: ' + err);
-            button.disabled = false;
-            button.textContent = mode === 'missing' ? 'Genera Mancanti' : (mode === 'outdated' ? 'Rigenera Non Aggiornati' : 'Genera Tutto');
-        });
+			if (!confirm('⚠️ ATTENZIONE: Questo eliminerà TUTTI gli schema generati da TUTTE le pagine/post. Vuoi davvero continuare?')) {
+				return;
+			}
 
- function processBatch() {
-        fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                action: 'aisg_process_batch',
-                nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_process_batch' ) ); ?>'
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update progress bar with latest data
-                updateProgressBar(data.data);
-                
-                if (data.data?.status === 'complete') {
-                    // All done
-                    location.reload();
-                } else if (data.data?.has_more) {
-                    // Process next batch after short delay
-                    setTimeout(processBatch, 500);
-                }
-            } else {
-                console.error('Error processing batch:', data);
-            }
-        })
-        .catch(err => {
-            console.error('Network error:', err);
-            setTimeout(processBatch, 1000);
-        });
-    
-    // Start polling for progress updates
-    function startProgressPolling() {
-        if (window.progressPollInterval) {
-            clearInterval(window.progressPollInterval);
-        }
-        
-        window.progressPollInterval = setInterval(() => {
-            fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    action: 'aisg_get_progress',
-                    nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_get_progress' ) ); ?>'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.data) {
-                    updateProgressBar(data.data);
-                    
-                    // If complete, stop polling and reload
-                    if (data.data.status === 'complete') {
-                        clearInterval(window.progressPollInterval);
-                        location.reload();
-                    }
-                }
-            })
-            .catch(err => {
-                console.error('Polling error:', err);
-            });
-        }, 2000); // Poll every 2 seconds
-    
-    function updateProgressBar(progress) {
-        // Find or create progress bar container
-        let progressContainer = document.querySelector('.aisg-progress-container');
-        
-        if (!progressContainer) {
-            // Create progress bar if it doesn't exist
-            const bulkActionsDiv = document.querySelector('div:has(> #aisg-generate-missing)').parentNode.parentNode;
-            if (bulkActionsDiv) {
-                progressContainer = document.createElement('div');
-                progressContainer.className = 'aisg-progress-container';
-                progressContainer.style.background = 'white';
-                progressContainer.style.padding = '20px';
-                progressContainer.style.borderRadius = '8px';
-                progressContainer.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                progressContainer.style.marginBottom = '20px';
-                
-                bulkActionsDiv.parentNode.insertBefore(progressContainer, bulkActionsDiv.nextSibling);
-            }
-        }
-        
-        if (progressContainer) {
-            const method = progress.method || 'ajax';
-            const methodLabel = 'wp-cron' === method ? 'WP-Cron' : 'AJAX Polling';
-            const methodColor = 'wp-cron' === method ? '#28a745' : '#0073aa';
-            
-            const done = progress.done || 0;
-            const total = progress.total || 1;
-            const pct = Math.round((done / Math.max(total, 1)) * 100);
-            
-            progressContainer.innerHTML = `
-                <h3>Generazione in Corso</h3>
-                <p style="margin: 0 0 12px 0; font-size: 12px; color: #666;">
-                    Metodo: <span style="color: ${methodColor}; font-weight: bold;">● ${methodLabel}</span>
-                </p>
-                <div style="margin: 12px 0;">
-                    <div style="background: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
-                        <div style="background: #0073aa; height: 100%; width: ${pct}%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;">
-                            ${pct}%
-                        </div>
-                    </div>
-                </div>
-                <p style="margin: 8px 0; font-size: 14px;">
-                    ${done} / ${total} completati
-                    ${progress.errors ? `(${progress.errors} errori)` : ''}
-                </p>
-            `;
-        }
+			const button = this;
+			button.disabled = true;
+			button.textContent = 'Pulizia in corso...';
 
-    bindBulkActions();
-    bindClearAllButton();
-    
-    // Clean up polling when page unloads
-    window.addEventListener('beforeunload', () => {
-        if (window.progressPollInterval) {
-            clearInterval(window.progressPollInterval);
-        }
-}
+			fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				body: new URLSearchParams({
+					action: 'aisg_clear_all_schemas',
+					nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_clear_all_schemas' ) ); ?>'
+				})
+			})
+			.then(response => response.json())
+			.then(data => {
+				button.disabled = false;
+				button.textContent = '🔥 PULISCI TUTTI GLI SCHEMA (DEBUG)';
 
-function bindClearAllButton() {
-    document.getElementById('aisg-clear-all-schemas')?.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        if (!confirm('⚠️ ATTENZIONE: Questo eliminerà TUTTI gli schema generati da TUTTE le pagine/post. Vuoi davvero continuare?')) {
-            return;
-        }
-        
-        const button = this;
-        button.disabled = true;
-        button.textContent = 'Pulizia in corso...';
-        
-        fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                action: 'aisg_clear_all_schemas',
-                nonce: '<?php echo esc_attr( wp_create_nonce( 'aisg_clear_all_schemas' ) ); ?>'
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            button.disabled = false;
-            button.textContent = '🔥 PULISCI TUTTI GLI SCHEMA (DEBUG)';
-            
-            if (data.success) {
-                alert('✓ Tutti gli schema sono stati eliminati. ' + data.data.message);
-                location.reload();
-            } else {
-                alert('✗ Errore durante la pulizia: ' + (data.data?.message || 'Riprova'));
-            }
-        })
-        .catch(err => {
-            alert('✗ Errore di rete: ' + err);
-            button.disabled = false;
-            button.textContent = '🔥 PULISCI TUTTI GLI SCHEMA (DEBUG)';
-        });
-}
+				if (data.success) {
+					alert('✓ Tutti gli schema sono stati eliminati. ' + data.data.message);
+					location.reload();
+				} else {
+					alert('✗ Errore durante la pulizia: ' + (data.data?.message || 'Riprova'));
+				}
+			})
+			.catch(err => {
+				alert('✗ Errore di rete: ' + err);
+				button.disabled = false;
+				button.textContent = '🔥 PULISCI TUTTI GLI SCHEMA (DEBUG)';
+			});
+		});
+	}
 
-bindBulkActions();
-bindClearAllButton();
+	bindBulkActions();
+	bindClearAllButton();
+
+	window.addEventListener('beforeunload', () => {
+		if (window.progressPollInterval) {
+			clearInterval(window.progressPollInterval);
+		}
+	});
 </script>
 
 	<!-- Debug Panel -->
