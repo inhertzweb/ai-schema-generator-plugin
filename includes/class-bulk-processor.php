@@ -51,18 +51,21 @@ class BulkProcessor {
 			'fields'         => 'ids',
 		);
 
-		// Filter by mode
-		if ( 'missing' === $mode ) {
-			$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query
-				array(
-					'key'     => '_aisg_schema_json',
-					'compare' => 'NOT EXISTS',
-				),
-			);
-		} elseif ( 'outdated' === $mode ) {
-			// Compare post_modified with last schema generation
-			// This is complex with meta queries, so we'll filter after
-		}
+        // Filter by mode
+        if ( 'missing' === $mode ) {
+            $args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query
+                array(
+                    'key'     => '_aisg_schema_json',
+                    'compare' => 'NOT EXISTS',
+                ),
+            );
+        } elseif ( 'outdated' === $mode ) {
+            // Compare post_modified with last schema generation
+            // This is complex with meta queries, so we'll filter after
+        } elseif ( 'all' === $mode ) {
+            // For 'all' mode, we want to regenerate everything including existing schemas
+            // No filtering needed - we'll process all posts
+        }
 
 		$query = new \WP_Query( $args );
 		$post_ids = $query->posts;
@@ -91,18 +94,19 @@ class BulkProcessor {
 			array_values( $post_ids )
 		);
 
-		// Store progress
-		update_option(
-			'aisg_bulk_progress',
-			array(
-				'total'      => count( $post_ids ),
-				'done'       => 0,
-				'errors'     => 0,
-				'started'    => current_time( 'mysql' ),
-				'status'     => 'running',
-				'method'     => 'wp-cron', // Track which method is processing
-			)
-		);
+        // Store progress
+        update_option(
+            'aisg_bulk_progress',
+            array(
+                'total'      => count( $post_ids ),
+                'done'       => 0,
+                'errors'     => 0,
+                'started'    => current_time( 'mysql' ),
+                'status'     => 'running',
+                'method'     => 'wp-cron', // Track which method is processing
+                'mode'       => $mode, // Store the mode for batch processing
+            )
+        );
 
 		// Schedule first batch via WP-Cron (will process all batches)
 		// Use a unique timestamp to avoid conflicts
@@ -157,26 +161,32 @@ class BulkProcessor {
 			update_option( 'aisg_bulk_queue', $remaining );
 		}
 
-		// Process batch with timeout protection
-		foreach ( $batch as $post_id ) {
-			// Check timeout - if we're close to timing out, stop and reschedule rest
-			if ( time() - $start_time > $timeout ) {
-				// Put remaining posts back in queue
-				if ( ! empty( $remaining ) ) {
-					update_option( 'aisg_bulk_queue', $remaining );
-				}
-				update_option( 'aisg_bulk_progress', $progress );
-				return true; // Signal that more batches need processing
-			}
+        // Process batch with timeout protection
+        foreach ( $batch as $post_id ) {
+            // Check timeout - if we're close to timing out, stop and reschedule rest
+            if ( time() - $start_time > $timeout ) {
+                // Put remaining posts back in queue
+                if ( ! empty( $remaining ) ) {
+                    update_option( 'aisg_bulk_queue', $remaining );
+                }
+                update_option( 'aisg_bulk_progress', $progress );
+                return true; // Signal that more batches need processing
+            }
 
-			$result = SchemaBuilder::build( $post_id );
+            // If mode is 'all', delete existing schema before regenerating
+            if ( isset( $progress['mode'] ) && 'all' === $progress['mode'] ) {
+                delete_post_meta( $post_id, '_aisg_schema_json' );
+                delete_post_meta( $post_id, '_aisg_schema_generated_at' );
+            }
 
-			if ( $result ) {
-				$progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
-			} else {
-				$progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
-			}
-		}
+            $result = SchemaBuilder::build( $post_id );
+
+            if ( $result ) {
+                $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
+            } else {
+                $progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
+            }
+        }
 
 		update_option( 'aisg_bulk_progress', $progress );
 
@@ -222,19 +232,25 @@ class BulkProcessor {
 			update_option( 'aisg_bulk_queue', $remaining );
 		}
 
-		// Process each post in batch
-		foreach ( $batch as $post_id ) {
-			// Add 0.5 second delay between requests
-			usleep( 500000 );
+        // Process each post in batch
+        foreach ( $batch as $post_id ) {
+            // Add 0.5 second delay between requests
+            usleep( 500000 );
 
-			$result = SchemaBuilder::build( $post_id );
+            // If mode is 'all', delete existing schema before regenerating
+            if ( isset( $progress['mode'] ) && 'all' === $progress['mode'] ) {
+                delete_post_meta( $post_id, '_aisg_schema_json' );
+                delete_post_meta( $post_id, '_aisg_schema_generated_at' );
+            }
 
-			if ( $result ) {
-				$progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
-			} else {
-				$progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
-			}
-		}
+            $result = SchemaBuilder::build( $post_id );
+
+            if ( $result ) {
+                $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
+            } else {
+                $progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
+            }
+        }
 
 		update_option( 'aisg_bulk_progress', $progress );
 

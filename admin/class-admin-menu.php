@@ -16,7 +16,8 @@ class AdminMenu {
 		add_action( 'wp_ajax_aisg_delete_schema', [ __CLASS__, 'ajax_delete_schema' ] );
 		add_action( 'wp_ajax_aisg_bulk_generate', [ __CLASS__, 'ajax_bulk_generate' ] );
 		add_action( 'wp_ajax_aisg_process_batch', [ __CLASS__, 'ajax_process_batch' ] );
-		add_action( 'wp_ajax_aisg_get_progress', [ __CLASS__, 'ajax_get_progress' ] );
+        add_action( 'wp_ajax_aisg_get_progress', [ __CLASS__, 'ajax_get_progress' ] );
+        add_action( 'wp_ajax_aisg_clear_all_schemas', [ __CLASS__, 'ajax_clear_all_schemas' ] );
 	}
 
 	/**
@@ -266,8 +267,65 @@ class AdminMenu {
 
 		$progress = BulkProcessor::get_progress();
 
-		wp_send_json_success( $progress );
-	}
+        wp_send_json_success( $progress );
+    }
+
+    /**
+     * AJAX clear all schemas (debug function)
+     */
+    public static function ajax_clear_all_schemas() {
+        check_ajax_referer( 'aisg_clear_all_schemas', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Unauthorized' ), 403 );
+        }
+
+        $post_types = Settings::get( 'post_types', array( 'post', 'page' ) );
+        if ( empty( $post_types ) ) {
+            $post_types = array( 'post', 'page' );
+        }
+
+        // Query all posts with schemas
+        $args = array(
+            'post_type'      => $post_types,
+            'posts_per_page' => -1,
+            'post_status'    => 'publish',
+            'fields'         => 'ids',
+            'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query
+                array(
+                    'key'     => '_aisg_schema_json',
+                    'compare' => 'EXISTS',
+                ),
+            ),
+        );
+
+        $query = new \WP_Query( $args );
+        $post_ids = $query->posts;
+        $count = count( $post_ids );
+
+        if ( empty( $post_ids ) ) {
+            wp_send_json_success( array(
+                'message' => 'Nessuno schema trovato da eliminare.',
+                'count'   => 0,
+            ) );
+        }
+
+        // Delete schemas from all posts
+        foreach ( $post_ids as $post_id ) {
+            delete_post_meta( $post_id, '_aisg_schema_json' );
+            delete_post_meta( $post_id, '_aisg_schema_generated_at' );
+        }
+
+        // Clear bulk processing data
+        delete_option( 'aisg_bulk_queue' );
+        delete_option( 'aisg_bulk_progress' );
+        delete_option( 'aisg_cron_trigger_time' );
+
+        wp_send_json_success( array(
+            'message' => sprintf( '%d schema eliminati da %d pagine/post.', $count, $count ),
+            'count'   => $count,
+        ) );
+    }
 
 	/**
 	 * Render dashboard page
