@@ -280,7 +280,6 @@ $log = get_option( 'aisg_log', array() );
             button.disabled = false;
             button.textContent = mode === 'missing' ? 'Genera Mancanti' : (mode === 'outdated' ? 'Rigenera Non Aggiornati' : 'Genera Tutto');
         });
-    }
 
  function processBatch() {
         fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
@@ -314,7 +313,6 @@ $log = get_option( 'aisg_log', array() );
             console.error('Network error:', err);
             setTimeout(processBatch, 1000);
         });
-    }
     
     // Start polling for progress updates
     function startProgressPolling() {
@@ -349,7 +347,6 @@ $log = get_option( 'aisg_log', array() );
                 console.error('Polling error:', err);
             });
         }, 2000); // Poll every 2 seconds
-    }
     
     function updateProgressBar(progress) {
         // Find or create progress bar container
@@ -398,7 +395,6 @@ $log = get_option( 'aisg_log', array() );
                 </p>
             `;
         }
-    }
 
     bindBulkActions();
     bindClearAllButton();
@@ -408,7 +404,6 @@ $log = get_option( 'aisg_log', array() );
         if (window.progressPollInterval) {
             clearInterval(window.progressPollInterval);
         }
-    });
 }
 
 function bindClearAllButton() {
@@ -450,7 +445,6 @@ function bindClearAllButton() {
             button.disabled = false;
             button.textContent = '🔥 PULISCI TUTTI GLI SCHEMA (DEBUG)';
         });
-    });
 }
 
 bindBulkActions();
