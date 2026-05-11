@@ -28,6 +28,7 @@ require_once AISG_PATH . 'includes/class-llms-fetcher.php';
 require_once AISG_PATH . 'includes/class-ai-engine.php';
 require_once AISG_PATH . 'includes/class-claude-provider.php';
 require_once AISG_PATH . 'includes/class-gemini-provider.php';
+require_once AISG_PATH . 'includes/class-gemini-models.php';
 require_once AISG_PATH . 'includes/class-page-analyzer.php';
 require_once AISG_PATH . 'includes/class-faq-extractor.php';
 require_once AISG_PATH . 'includes/class-schema-builder.php';

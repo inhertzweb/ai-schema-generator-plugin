@@ -81,7 +81,7 @@ class Settings {
 			array(
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => 'gemini-3.1-pro-preview',
+				'default'           => 'gemini-1.5-pro',
 			)
 		);
 

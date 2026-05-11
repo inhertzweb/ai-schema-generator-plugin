@@ -181,9 +181,8 @@ class BulkProcessor {
 
             $result = SchemaBuilder::build( $post_id );
 
-            if ( $result ) {
-                $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
-            } else {
+            $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
+            if ( ! $result ) {
                 $progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
             }
         }
@@ -245,9 +244,8 @@ class BulkProcessor {
 
             $result = SchemaBuilder::build( $post_id );
 
-            if ( $result ) {
-                $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
-            } else {
+            $progress['done'] = isset( $progress['done'] ) ? $progress['done'] + 1 : 1;
+            if ( ! $result ) {
                 $progress['errors'] = isset( $progress['errors'] ) ? $progress['errors'] + 1 : 1;
             }
         }

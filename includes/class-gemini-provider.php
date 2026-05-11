@@ -30,7 +30,7 @@ class GeminiProvider implements AIProviderInterface {
 			throw new \Exception( 'Gemini API key not configured' );
 		}
 
-		$model = Settings::get( 'model_gemini', 'gemini-3.1-pro-preview' );
+		$model = Settings::get( 'model_gemini', 'gemini-1.5-pro' );
 		$url   = self::ENDPOINT . '/' . $model . ':generateContent?key=' . urlencode( $api_key );
 
 		$body = array(
@@ -112,7 +112,7 @@ class GeminiProvider implements AIProviderInterface {
 	 * Get model name
 	 */
 	public function get_model_name() {
-		return Settings::get( 'model_gemini', 'gemini-3.1-pro-preview' );
+		return Settings::get( 'model_gemini', 'gemini-1.5-pro' );
 	}
 
 	/**

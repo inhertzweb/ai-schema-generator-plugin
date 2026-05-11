@@ -11,7 +11,7 @@ $provider = Settings::get( 'provider', 'claude' );
 $api_key_claude = Settings::get_api_key( 'claude' );
 $api_key_gemini = Settings::get_api_key( 'gemini' );
 $model_claude = Settings::get( 'model_claude', 'claude-sonnet-4-20250514' );
-$model_gemini = Settings::get( 'model_gemini', 'gemini-2.5-flash-preview-05-20' );
+$model_gemini = Settings::get( 'model_gemini', 'gemini-2.5-flash' );
 $brief = Settings::get( 'business_brief', '' );
 $llms_url = Settings::get( 'llms_txt_url', home_url( '/llms.txt' ) );
 $refresh_freq = Settings::get( 'llms_refresh_frequency', '24h' );
@@ -79,9 +79,26 @@ $custom_logo_url = Settings::get( 'logo_url', '' );
 				<td><label for="aisg_model_gemini">Modello Gemini</label></td>
 				<td>
 					<select id="aisg_model_gemini" name="aisg_model_gemini">
-						<option value="gemini-3.1-pro-preview" <?php selected( $model_gemini, 'gemini-3.1-pro-preview' ); ?>>Gemini 3.1 Pro (Consigliato)</option>
-						<option value="gemini-3-flash-preview" <?php selected( $model_gemini, 'gemini-3-flash-preview' ); ?>>Gemini 3 Flash</option>
+						<?php
+						try {
+							if ( ! class_exists( '\IHW_AISG\GeminiModels' ) ) {
+								echo '<option value="">⚠️ Classe GeminiModels non trovata</option>';
+							} else {
+								$gemini_models = \IHW_AISG\GeminiModels::get_models();
+								if ( empty( $gemini_models ) ) {
+									echo '<option value="">⚠️ Nessun modello disponibile</option>';
+								} else {
+									foreach ( $gemini_models as $model_id => $model_name ) {
+										echo '<option value="' . esc_attr( $model_id ) . '" ' . selected( $model_gemini, $model_id ) . '>' . esc_html( $model_name ) . '</option>';
+									}
+								}
+							}
+						} catch ( Exception $e ) {
+							echo '<option value="">⚠️ Errore: ' . esc_html( $e->getMessage() ) . '</option>';
+						}
+						?>
 					</select>
+					<div class="aisg-hint">Modelli caricati da Google Generative AI API</div>
 				</td>
 			</tr>
 			<tr>

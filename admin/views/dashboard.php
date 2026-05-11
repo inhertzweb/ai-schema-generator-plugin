@@ -441,6 +441,3 @@ $log = get_option( 'aisg_log', array() );
 		}
 	});
 </script>
-
-	<!-- Debug Panel -->
-	<?php Diagnostics::output_debug_panel(); ?>
